@@ -14,6 +14,12 @@ const { PolicyAnalyzer } = require('./policy-analyzer');
 // Import network topology generator
 const { NetworkTopologyGenerator } = require('./network-topology');
 
+// Import new troubleshooting modules
+const HealthMonitor = require('./health-monitor');
+const ConnectivityTester = require('./connectivity-tester');
+const VPNDiagnostics = require('./vpn-diagnostics');
+const PerformanceAnalyzer = require('./performance-analyzer');
+
 // Allow self-signed TLS if requested (ONLY for trusted labs)
 if (String(process.env.ALLOW_SELF_SIGNED).toLowerCase() === 'true') {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -1205,6 +1211,165 @@ app.get('/api/network/topology/export', async (req, res) => {
   }
 });
 
+// ============================================================================
+// NEW TROUBLESHOOTING ENDPOINTS
+// ============================================================================
+
+/**
+ * GET /api/system/health
+ * Enhanced health monitoring with threshold-based alerts
+ */
+app.get('/api/system/health', async (req, res) => {
+  try {
+    console.log('🏥 Enhanced health check requested');
+    const healthMonitor = new HealthMonitor(apiClient);
+    const healthStatus = await healthMonitor.checkSystemHealth();
+
+    res.json(healthStatus);
+  } catch (error) {
+    console.error('❌ Error in health check:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to check system health',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * POST /api/troubleshoot/connectivity
+ * Test network connectivity between endpoints
+ *
+ * Request body:
+ * {
+ *   "source": "192.168.1.100",
+ *   "destination": "8.8.8.8",
+ *   "port": 443,
+ *   "protocol": "tcp"
+ * }
+ */
+app.post('/api/troubleshoot/connectivity', async (req, res) => {
+  try {
+    const { source, destination, port, protocol } = req.body;
+
+    if (!destination) {
+      return res.status(400).json({
+        error: 'Destination IP or hostname is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`🔍 Connectivity test: ${source || 'default'} → ${destination}:${port || 'any'} (${protocol || 'icmp'})`);
+
+    const tester = new ConnectivityTester(apiClient);
+    const results = await tester.diagnoseConnectivity({
+      source,
+      destination,
+      port,
+      protocol: protocol || 'icmp'
+    });
+
+    res.json(results);
+  } catch (error) {
+    console.error('❌ Error in connectivity test:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to perform connectivity test',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * POST /api/troubleshoot/vpn
+ * Diagnose VPN tunnel issues
+ *
+ * Request body:
+ * {
+ *   "tunnel_name": "site-to-site-vpn"
+ * }
+ */
+app.post('/api/troubleshoot/vpn', async (req, res) => {
+  try {
+    const { tunnel_name } = req.body;
+
+    if (!tunnel_name) {
+      return res.status(400).json({
+        error: 'VPN tunnel name is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`🔐 VPN diagnostics requested for: ${tunnel_name}`);
+
+    const vpnDiag = new VPNDiagnostics(apiClient);
+    const results = await vpnDiag.diagnoseVPNTunnel(tunnel_name);
+
+    res.json(results);
+  } catch (error) {
+    console.error('❌ Error in VPN diagnostics:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to diagnose VPN tunnel',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/system/performance/analyze
+ * Analyze system performance and identify bottlenecks
+ */
+app.get('/api/system/performance/analyze', async (req, res) => {
+  try {
+    console.log('📊 Performance analysis requested');
+    const analyzer = new PerformanceAnalyzer(apiClient);
+    const analysis = await analyzer.analyzePerformance();
+
+    res.json(analysis);
+  } catch (error) {
+    console.error('❌ Error in performance analysis:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to analyze performance',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/vpn/diagnostics
+ * List all VPN tunnels with basic diagnostic info
+ */
+app.get('/api/vpn/diagnostics', async (req, res) => {
+  try {
+    console.log('🔐 VPN diagnostics list requested');
+
+    // Get all VPN tunnels
+    const tunnels = await apiClient.get('monitor/vpn/ipsec');
+    const tunnelList = tunnels?.results || [];
+
+    const diagnostics = tunnelList.map(tunnel => ({
+      name: tunnel.name,
+      phase1_status: tunnel.status === 1 ? 'up' : 'down',
+      phase2_status: tunnel.proxyid?.[0]?.status === 1 ? 'up' : 'down',
+      remote_gw: tunnel.rgwy,
+      local_gw: tunnel.lgwy,
+      bytes_sent: tunnel.proxyid?.[0]?.outbytes || 0,
+      bytes_received: tunnel.proxyid?.[0]?.inbytes || 0,
+      created: tunnel.created
+    }));
+
+    res.json({
+      total_tunnels: diagnostics.length,
+      tunnels: diagnostics,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error in VPN diagnostics list:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to get VPN diagnostics',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 /**
  * Helper function to convert array of objects to CSV string
  */
@@ -1280,5 +1445,11 @@ app.listen(PORT, () => {
   console.log(`\n🗺️  Network Topology Endpoints:`);
   console.log(`   - GET /api/network/topology - Generate network topology with devices & connections`);
   console.log(`   - GET /api/network/topology/export?format=json|csv - Export topology data`);
+  console.log(`\n🛠️  Troubleshooting Endpoints:`);
+  console.log(`   - GET /api/system/health - Enhanced health monitoring with alerts`);
+  console.log(`   - POST /api/troubleshoot/connectivity - Test network connectivity`);
+  console.log(`   - POST /api/troubleshoot/vpn - Diagnose VPN tunnel issues`);
+  console.log(`   - GET /api/vpn/diagnostics - List all VPN tunnels with status`);
+  console.log(`   - GET /api/system/performance/analyze - Performance bottleneck analysis`);
   console.log(`\n🎯 Ready for connections!`);
 });
