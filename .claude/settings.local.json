@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(curl:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.fortinet.com)",
+      "WebFetch(domain:community.fortinet.com)",
+      "Bash(ip route:*)",
+      "Bash(ping:*)",
+      "WebFetch(domain:ca.netintegrate.net)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(./install-fortigate-cert.sh:*)",
+      "Bash(ssh:*)",
+      "Bash(sudo apt:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(expect:*)",
+      "Bash(python3 -m json.tool)",
+      "Read(//home/keransom/firewall_optimizer/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

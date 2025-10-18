@@ -1,3 +1,235 @@
+const fs = require('fs');
+const path = require('path');
+// Helper: Build unified topology (enriched)
+async function buildUnifiedTopology() {
+  const [apsData, switchesData, wifiClientsData, switchDevicesData] = await Promise.all([
+    apiClient.get('monitor/wifi/managed_ap'),
+    apiClient.get('monitor/switch-controller/managed-switch/status'),
+    apiClient.get('monitor/wifi/client'),
+    apiClient.get('monitor/switch-controller/detected-device')
+  ]);
+  const aps = apsData?.results || [];
+  const switches = switchesData?.results || [];
+  const wifiClients = wifiClientsData?.results || [];
+  const switchDevices = switchDevicesData?.results || [];
+  // Build nodes with details
+  const nodes = [];
+  nodes.push({ id: 'fortigate', label: 'FortiGate', type: 'FortiGate', details: {}});
+  aps.forEach(ap => nodes.push({ id: `ap-${ap.serial || ap.wtp_id}`, label: ap.name || ap.model, type: 'FortiAP', details: ap }));
+  switches.forEach(sw => nodes.push({ id: `switch-${sw.serial || sw.name}`, label: sw.name || sw.model, type: 'FortiSwitch', details: sw }));
+  wifiClients.forEach(client => nodes.push({ id: `wifi-${client.mac}`, label: client.hostname || client.mac, type: 'WiFiClient', details: client }));
+  switchDevices.forEach(dev => nodes.push({ id: `swdev-${dev.mac}`, label: dev.hostname || dev.mac, type: 'SwitchDevice', details: dev }));
+  // Build edges (enriched)
+  const edges = [];
+  switches.forEach(sw => {
+    edges.push({ source: 'fortigate', target: `switch-${sw.serial || sw.name}`, type: 'fortilink', details: { sw } });
+  });
+  aps.forEach(ap => {
+    edges.push({ source: 'fortigate', target: `ap-${ap.serial || ap.wtp_id}`, type: 'capwap', details: { ap } });
+  });
+  wifiClients.forEach(client => {
+    if (client.ap_mac) {
+      const apNode = nodes.find(n => n.type === 'FortiAP' && (n.details.mac === client.ap_mac || n.details.wtp_id === client.ap_mac));
+      if (apNode) {
+        edges.push({ source: apNode.id, target: `wifi-${client.mac}`, type: 'wifi', details: { client } });
+      }
+    }
+  });
+  switchDevices.forEach(dev => {
+    if (dev.switch_mac) {
+      const swNode = nodes.find(n => n.type === 'FortiSwitch' && (n.details.mac === dev.switch_mac || n.details.serial === dev.switch_mac));
+      if (swNode) {
+        edges.push({ source: swNode.id, target: `swdev-${dev.mac}`, type: 'switchport', details: { dev } });
+      }
+    }
+  });
+  return { nodes, edges, statistics: {
+    fortigate: 1, aps: aps.length, switches: switches.length, wifi_clients: wifiClients.length, switch_devices: switchDevices.length
+  }};
+}
+// Draw.io GraphML Export Endpoint
+app.get('/api/network/topology/export/graphml', async (_req, res) => {
+  try {
+    const { nodes, edges } = await buildUnifiedTopology();
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<graphml xmlns="http://graphml.graphdrawing.org/xmlns">\n  <graph id="G" edgedefault="undirected">\n';
+    nodes.forEach(n => {
+      xml += `    <node id="${n.id}"><data key="label">${n.label}</data><data key="type">${n.type}</data></node>\n`;
+    });
+    edges.forEach((e, i) => {
+      xml += `    <edge id="e${i}" source="${e.source}" target="${e.target}"><data key="type">${e.type}</data></edge>\n`;
+    });
+    xml += '  </graph>\n</graphml>';
+    res.setHeader('Content-Type', 'application/graphml+xml');
+    res.setHeader('Content-Disposition', 'attachment; filename="network-topology.graphml"');
+    res.send(xml);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Draw.io XML Export Endpoint (mxGraph)
+app.get('/api/network/topology/export/xml', async (_req, res) => {
+  try {
+    const { nodes, edges } = await buildUnifiedTopology();
+    let xml = '<?xml version="1.0" encoding="UTF-8"?><mxGraphModel><root>';
+    nodes.forEach((n, idx) => {
+      xml += `<mxCell id="${n.id}" value="${n.label}" vertex="1"><mxGeometry x="${100 + idx*50}" y="100" width="80" height="40" as="geometry"/></mxCell>`;
+    });
+    edges.forEach((e, i) => {
+      xml += `<mxCell id="e${i}" edge="1" source="${e.source}" target="${e.target}"><mxGeometry relative="1" as="geometry"/></mxCell>`;
+    });
+    xml += '</root></mxGraphModel>';
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Content-Disposition', 'attachment; filename="network-topology.xml"');
+    res.send(xml);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Draw.io CSV Export Endpoint
+app.get('/api/network/topology/export/csv', async (_req, res) => {
+  try {
+    const { nodes, edges } = await buildUnifiedTopology();
+    let csv = 'Id,Label,Type\n';
+    nodes.forEach(n => {
+      csv += `${n.id},${n.label},${n.type}\n`;
+    });
+    csv += '\nSource,Target,Type\n';
+    edges.forEach(e => {
+      csv += `${e.source},${e.target},${e.type}\n`;
+    });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="network-topology.csv"');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Frontend: Integrated Topology Visualization (Cytoscape.js)
+app.get('/topology.html', async (_req, res) => {
+  res.sendFile(path.join(__dirname, 'topology.html'));
+});
+// Unified Network Topology Endpoint (All Devices)
+/**
+ * GET /api/network/topology/all-devices
+ * Returns: Network topology map including FortiGate, FortiAPs, FortiSwitches, WiFi clients, and switch-connected devices
+ */
+app.get('/api/network/topology/all-devices', async (_req, res) => {
+  try {
+    // Fetch all required data in parallel
+    const [apsData, switchesData, wifiClientsData, switchDevicesData] = await Promise.all([
+      apiClient.get('monitor/wifi/managed_ap'),
+      apiClient.get('monitor/switch-controller/managed-switch/status'),
+      apiClient.get('monitor/wifi/client'),
+      apiClient.get('monitor/switch-controller/detected-device')
+    ]);
+
+    const aps = apsData?.results || [];
+    const switches = switchesData?.results || [];
+    const wifiClients = wifiClientsData?.results || [];
+    const switchDevices = switchDevicesData?.results || [];
+
+    // Build nodes
+    const nodes = [];
+    // FortiGate node (single, inferred from env)
+    nodes.push({ id: 'fortigate', label: 'FortiGate', type: 'FortiGate' });
+    // APs
+    aps.forEach(ap => nodes.push({ id: `ap-${ap.serial || ap.wtp_id}`, label: ap.name || ap.model, type: 'FortiAP', ap }));
+    // Switches
+    switches.forEach(sw => nodes.push({ id: `switch-${sw.serial || sw.name}`, label: sw.name || sw.model, type: 'FortiSwitch', sw }));
+    // WiFi clients
+    wifiClients.forEach(client => nodes.push({ id: `wifi-${client.mac}`, label: client.hostname || client.mac, type: 'WiFiClient', client }));
+    // Switch-connected devices
+    switchDevices.forEach(dev => nodes.push({ id: `swdev-${dev.mac}`, label: dev.hostname || dev.mac, type: 'SwitchDevice', dev }));
+
+    // Build edges (basic inference)
+    const edges = [];
+    // FortiGate <-> Switches (FortiLink)
+    switches.forEach(sw => {
+      edges.push({ source: 'fortigate', target: `switch-${sw.serial || sw.name}`, type: 'fortilink' });
+    });
+    // FortiGate <-> APs (CAPWAP)
+    aps.forEach(ap => {
+      edges.push({ source: 'fortigate', target: `ap-${ap.serial || ap.wtp_id}`, type: 'capwap' });
+    });
+    // AP <-> WiFi clients
+    wifiClients.forEach(client => {
+      if (client.ap_mac) {
+        const apNode = nodes.find(n => n.type === 'FortiAP' && (n.ap.mac === client.ap_mac || n.ap.wtp_id === client.ap_mac));
+        if (apNode) {
+          edges.push({ source: apNode.id, target: `wifi-${client.mac}`, type: 'wifi' });
+        }
+      }
+    });
+    // Switch <-> connected devices
+    switchDevices.forEach(dev => {
+      if (dev.switch_mac) {
+        const swNode = nodes.find(n => n.type === 'FortiSwitch' && (n.sw.mac === dev.switch_mac || n.sw.serial === dev.switch_mac));
+        if (swNode) {
+          edges.push({ source: swNode.id, target: `swdev-${dev.mac}`, type: 'switchport' });
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      nodes,
+      edges,
+      statistics: {
+        fortigate: 1,
+        aps: aps.length,
+        switches: switches.length,
+        wifi_clients: wifiClients.length,
+        switch_devices: switchDevices.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error building unified topology:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to build unified network topology',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+// All Switch-Connected Devices Endpoint
+/**
+ * GET /api/fortiswitch/connected-devices
+ * Returns: List of all devices connected to FortiSwitch ports
+ */
+app.get('/api/fortiswitch/connected-devices', async (_req, res) => {
+  try {
+    console.log('🔍 Fetching all switch-connected devices...');
+    const data = await apiClient.get('monitor/switch-controller/detected-device');
+    const devices = data?.results || [];
+    res.json({ total_devices: devices.length, devices });
+  } catch (error) {
+    console.error('❌ Error fetching switch-connected devices:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to fetch switch-connected devices',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+// FortiAP WiFi Clients Endpoint
+/**
+ * GET /api/fortiap/clients
+ * Returns: List of WiFi clients connected to all FortiAPs
+ */
+app.get('/api/fortiap/clients', async (_req, res) => {
+  try {
+    console.log('🔍 Fetching FortiAP WiFi clients...');
+    const data = await apiClient.get('monitor/wifi/client');
+    const clients = data?.results || [];
+    res.json({ total_clients: clients.length, clients });
+  } catch (error) {
+    console.error('❌ Error fetching FortiAP WiFi clients:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to fetch FortiAP WiFi clients',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -43,16 +275,7 @@ if (!FGT_URL) {
 }
 
 if (!FGT_TOKEN) {
-  console.warn('[WARN] FGT_TOKEN not set in .env file.');
-  console.warn('To use real FortiGate data:');
-  console.warn('1. Create an API administrator in FortiGate:');
-  console.warn('   - Go to System > Administrators');
-  console.warn('   - Create new administrator with "REST API Admin" profile');
-  console.warn('   - Copy the generated API token');
-  console.warn('2. Set FGT_TOKEN=your_api_token in .env file');
-  console.warn('3. Configure trusted hosts if needed for security');
-  console.warn('');
-  console.warn('Dashboard will use fallback YAML data until token is configured.');
+  console.warn('[WARN] FGT_TOKEN not set in .env file. The dashboard will not function until a valid API token is provided.');
 } else {
   console.log('✅ Using FortiOS API token authentication');
 }
@@ -247,80 +470,25 @@ app.get('/api/fortiswitches', async (_req, res) => {
 app.get('/api/overview', async (_req, res) => {
   try {
     console.log('📊 Fetching overview data...');
-    
+    // Only use live FortiGate API data
     let apData, swData;
-    let usingFallbackData = false;
-    
+    // Attempt to get data from FortiOS API with parallel requests
+    console.log('🔄 Attempting FortiOS API requests...');
+    apData = await fortiOSAPI('/api/v2/monitor/wifi/managed_ap?format=name|wtp_id|status|ip|model|serial|uptime|client_count');
     try {
-      // Attempt to get data from FortiOS API with parallel requests
-      console.log('🔄 Attempting FortiOS API requests...');
-      // Get FortiAP data (working)
-      apData = await fortiOSAPI('/api/v2/monitor/wifi/managed_ap?format=name|wtp_id|status|ip|model|serial|uptime|client_count');
-      
-      // FortiSwitch endpoint - correct path for FortiOS 7.6+
-      // Endpoint: /api/v2/monitor/switch-controller/managed-switch/status
-
-      try {
-        swData = await fortiOSAPI('/api/v2/monitor/switch-controller/managed-switch/status');
-      } catch (switchError) {
-        console.log('⚠️  FortiSwitch endpoint not available, using interface data');
-        swData = await fortiOSAPI('/api/v2/monitor/system/interface');
-      }
-      
-      console.log('✅ FortiOS API data retrieved successfully');
-      
-    } catch (apiError) {
-      console.warn('⚠️  FortiOS API unavailable, using fallback data:', apiError.message);
-      usingFallbackData = true;
-      
-      // Load YAML fallback data
-      try {
-        const fs = require('fs');
-        const yaml = require('yaml');
-        
-        const yamlContent = fs.readFileSync('./dashboard_data.yaml', 'utf8');
-        const yamlData = yaml.parse(yamlContent);
-        
-        console.log('📄 Using YAML fallback data');
-        
-        const responseData = {
-          last_updated: new Date().toISOString(),
-          fortiaps: yamlData.fortiaps || [],
-          fortiswitches: yamlData.fortiswitches || [],
-          historical_data: yamlData.historical_data || [],
-          system_health: yamlData.system_health || generateSystemHealth(yamlData.fortiaps || [], yamlData.fortiswitches || []),
-          network_topology: yamlData.network_topology || {
-            connections: [],
-            fortigate: {
-              fortilink_interface: "fortilink",
-              ip: FGT_URL?.replace('https://', '').replace('http://', '') || "192.168.1.1",
-              model: "FortiGate"
-            }
-          },
-          data_source: 'yaml_fallback',
-          api_status: 'unreachable'
-        };
-        
-        console.log(`📈 Fallback data loaded: ${responseData.fortiaps.length} APs, ${responseData.fortiswitches.length} switches`);
-        res.json(responseData);
-        return;
-        
-      } catch (yamlError) {
-        console.error('❌ Failed to load YAML fallback data:', yamlError.message);
-        throw new Error('Both FortiOS API and fallback data unavailable');
-      }
+      swData = await fortiOSAPI('/api/v2/monitor/switch-controller/managed-switch/status');
+    } catch (switchError) {
+      console.log('⚠️  FortiSwitch endpoint not available, using interface data');
+      swData = await fortiOSAPI('/api/v2/monitor/system/interface');
     }
-    
+    console.log('✅ FortiOS API data retrieved successfully');
     // Transform FortiOS API data
     console.log('🔄 Transforming FortiOS API data...');
-    
     const rawAPs = apData?.results ?? (Array.isArray(apData) ? apData : []);
     const rawSwitches = swData?.results ?? (Array.isArray(swData) ? swData : []);
-    
     const transformedAPs = transformFortiAPs(rawAPs);
     const transformedSwitches = transformFortiSwitches(rawSwitches);
     const systemHealth = generateSystemHealth(transformedAPs, transformedSwitches);
-    
     // Build comprehensive response
     const responseData = {
       last_updated: new Date().toISOString(),
@@ -339,11 +507,8 @@ app.get('/api/overview', async (_req, res) => {
       data_source: 'fortios_api',
       api_status: 'connected'
     };
-    
     console.log(`✅ Live data processed: ${responseData.fortiaps.length} APs, ${responseData.fortiswitches.length} switches, ${responseData.system_health.alerts.length} alerts`);
-    
     res.json(responseData);
-    
   } catch (error) {
     console.error('❌ Overview endpoint error:', error.message);
     res.status(500).json({
@@ -354,21 +519,18 @@ app.get('/api/overview', async (_req, res) => {
   }
 });
 
-// Serve the dashboard_data.yaml file directly
+// Serve the dashboard_data.yaml file directly (for explicit fallback testing only)
 app.get('/dashboard_data.yaml', (_req, res) => {
   res.sendFile('dashboard_data.yaml', { root: '.' });
 });
 
-// Add a special endpoint that serves YAML data as JSON for fallback
+// Add a special endpoint that serves YAML data as JSON for fallback (for explicit fallback testing only)
 app.get('/api/fallback-overview', async (_req, res) => {
   try {
-    console.log('Loading fallback data from YAML...');
     const fs = require('fs');
     const yaml = require('yaml');
-    
     const yamlContent = fs.readFileSync('./dashboard_data.yaml', 'utf8');
     const yamlData = yaml.parse(yamlContent);
-    
     // Format the response
     const responseData = {
       last_updated: new Date().toISOString(),
@@ -397,17 +559,13 @@ app.get('/api/fallback-overview', async (_req, res) => {
         avg_poe_utilization: 0
       }
     };
-    
     // Calculate average POE utilization
     if (responseData.system_health.total_poe_power_budget > 0) {
       responseData.system_health.avg_poe_utilization =
         (responseData.system_health.total_poe_power_consumption / responseData.system_health.total_poe_power_budget) * 100;
     }
-    
-    console.log('Sending fallback data from YAML');
     res.json(responseData);
   } catch (e) {
-    console.error('Error serving fallback data:', e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -1597,7 +1755,7 @@ app.listen(PORT, () => {
     console.log(`\n🧪 Test API: curl http://localhost:${PORT}/api/test`);
   } else {
     console.log(`\n⚠️  FortiOS API Token Not Configured`);
-    console.log(`   Dashboard will use fallback YAML data until configured.`);
+  // (Removed fallback YAML data log)
     console.log(`\n📋 To connect to real FortiGate:`);
     console.log(`   1. Create API administrator in FortiGate (System > Administrators)`);
     console.log(`   2. Use "REST API Admin" profile`);
