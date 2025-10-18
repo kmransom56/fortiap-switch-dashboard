@@ -20,6 +20,11 @@ const ConnectivityTester = require('./connectivity-tester');
 const VPNDiagnostics = require('./vpn-diagnostics');
 const PerformanceAnalyzer = require('./performance-analyzer');
 
+// Import Phase 3 modules
+const SecurityThreatAnalyzer = require('./security-threat-analyzer');
+const TrafficAnalyzer = require('./traffic-analyzer');
+const AIRecommendations = require('./ai-recommendations');
+
 // Allow self-signed TLS if requested (ONLY for trusted labs)
 if (String(process.env.ALLOW_SELF_SIGNED).toLowerCase() === 'true') {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -1370,6 +1375,183 @@ app.get('/api/vpn/diagnostics', async (req, res) => {
   }
 });
 
+// ============================================================================
+// PHASE 3: ADVANCED FEATURES
+// ============================================================================
+
+/**
+ * POST /api/security/threats/analyze
+ * Analyze security threats from FortiGate logs
+ *
+ * Request body (optional):
+ * {
+ *   "time_range": "24h",
+ *   "severity": "all",
+ *   "limit": 100
+ * }
+ */
+app.post('/api/security/threats/analyze', async (req, res) => {
+  try {
+    const { time_range, severity, limit } = req.body || {};
+
+    console.log(`🔒 Security threat analysis requested (range: ${time_range || '24h'})`);
+
+    const analyzer = new SecurityThreatAnalyzer(apiClient);
+    const analysis = await analyzer.analyzeSecurityThreats({
+      time_range: time_range || '24h',
+      severity: severity || 'all',
+      limit: limit || 100
+    });
+
+    res.json(analysis);
+  } catch (error) {
+    console.error('❌ Error in security threat analysis:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to analyze security threats',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/security/statistics
+ * Get security event statistics summary
+ */
+app.get('/api/security/statistics', async (req, res) => {
+  try {
+    console.log('🔒 Security statistics requested');
+
+    const analyzer = new SecurityThreatAnalyzer(apiClient);
+    const stats = await analyzer.getSecurityStatistics();
+
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Error getting security statistics:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to get security statistics',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * POST /api/traffic/analyze
+ * Analyze traffic patterns and bandwidth usage
+ *
+ * Request body (optional):
+ * {
+ *   "time_range": "24h",
+ *   "group_by": "application",
+ *   "limit": 10
+ * }
+ */
+app.post('/api/traffic/analyze', async (req, res) => {
+  try {
+    const { time_range, group_by, limit } = req.body || {};
+
+    console.log(`📊 Traffic analysis requested (range: ${time_range || '24h'}, group: ${group_by || 'application'})`);
+
+    const analyzer = new TrafficAnalyzer(apiClient);
+    const analysis = await analyzer.analyzeTrafficPatterns({
+      time_range: time_range || '24h',
+      group_by: group_by || 'application',
+      limit: limit || 10
+    });
+
+    res.json(analysis);
+  } catch (error) {
+    console.error('❌ Error in traffic analysis:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to analyze traffic patterns',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/traffic/top-consumers
+ * Get top bandwidth consumers
+ */
+app.get('/api/traffic/top-consumers', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+
+    console.log(`📊 Top bandwidth consumers requested (limit: ${limit})`);
+
+    const analyzer = new TrafficAnalyzer(apiClient);
+    const consumers = await analyzer.getTopBandwidthConsumers(limit);
+
+    res.json(consumers);
+  } catch (error) {
+    console.error('❌ Error getting top consumers:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to get top bandwidth consumers',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * POST /api/ai/analyze
+ * Get AI-driven recommendations for an issue
+ *
+ * Request body:
+ * {
+ *   "issue_type": "connectivity|vpn|performance|security",
+ *   "diagnostic_data": { ... }
+ * }
+ */
+app.post('/api/ai/analyze', async (req, res) => {
+  try {
+    const { issue_type, diagnostic_data } = req.body;
+
+    if (!issue_type || !diagnostic_data) {
+      return res.status(400).json({
+        error: 'issue_type and diagnostic_data are required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`🤖 AI analysis requested for ${issue_type} issue`);
+
+    const ai = new AIRecommendations(apiClient);
+    const analysis = await ai.analyzeIssue(diagnostic_data, issue_type);
+
+    res.json(analysis);
+  } catch (error) {
+    console.error('❌ Error in AI analysis:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to perform AI analysis',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/ai/statistics
+ * Get AI analysis statistics
+ */
+app.get('/api/ai/statistics', async (req, res) => {
+  try {
+    console.log('🤖 AI statistics requested');
+
+    const ai = new AIRecommendations(apiClient);
+    const stats = ai.getIssueStatistics();
+
+    res.json({
+      success: true,
+      statistics: stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error getting AI statistics:', error.message);
+    res.status(500).json({
+      error: error.message || 'Failed to get AI statistics',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 /**
  * Helper function to convert array of objects to CSV string
  */
@@ -1451,5 +1633,12 @@ app.listen(PORT, () => {
   console.log(`   - POST /api/troubleshoot/vpn - Diagnose VPN tunnel issues`);
   console.log(`   - GET /api/vpn/diagnostics - List all VPN tunnels with status`);
   console.log(`   - GET /api/system/performance/analyze - Performance bottleneck analysis`);
+  console.log(`\n🤖 AI & Advanced Analytics:`);
+  console.log(`   - POST /api/security/threats/analyze - Security threat analysis`);
+  console.log(`   - GET /api/security/statistics - Security event statistics`);
+  console.log(`   - POST /api/traffic/analyze - Traffic pattern analysis`);
+  console.log(`   - GET /api/traffic/top-consumers - Top bandwidth consumers`);
+  console.log(`   - POST /api/ai/analyze - AI-driven issue recommendations`);
+  console.log(`   - GET /api/ai/statistics - AI analysis statistics`);
   console.log(`\n🎯 Ready for connections!`);
 });
