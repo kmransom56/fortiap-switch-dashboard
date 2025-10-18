@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fortinet Infrastructure Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1><i class="fas fa-network-wired"></i> Fortinet Dashboard</h1>
+                <span class="last-updated">Last Updated: <span id="lastUpdatedTime">--</span></span>
+            </div>
+            <div class="header-right">
+                <button id="refreshBtn" class="btn btn--secondary btn--sm">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button id="themeToggle" class="btn btn--secondary btn--sm">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="exportBtn" class="btn btn--secondary btn--sm">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="overview">
+                    <i class="fas fa-tachometer-alt"></i> Overview
+                </button>
+                <button class="nav-tab" data-tab="fortiaps">
+                    <i class="fas fa-wifi"></i> FortiAPs
+                </button>
+                <button class="nav-tab" data-tab="fortiswitches">
+                    <i class="fas fa-sitemap"></i> FortiSwitches
+                </button>
+                <button class="nav-tab" data-tab="poe">
+                    <i class="fas fa-bolt"></i> POE Monitoring
+                </button>
+                <button class="nav-tab" data-tab="topology">
+                    <i class="fas fa-project-diagram"></i> Topology
+                </button>
+                <button class="nav-tab" data-tab="historical">
+                    <i class="fas fa-chart-line"></i> Historical
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="dashboard-grid">
+                <!-- System Health Summary -->
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <div class="summary-icon status-success">
+                            <i class="fas fa-wifi"></i>
+                        </div>
+                        <div class="summary-info">
+                            <h3 id="totalAPs">--</h3>
+                            <p>Total Access Points</p>
+                            <small><span id="apsOnline">--</span> online, <span id="apsOffline">--</span> offline</small>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <div class="summary-icon status-success">
+                            <i class="fas fa-sitemap"></i>
+                        </div>
+                        <div class="summary-info">
+                            <h3 id="totalSwitches">--</h3>
+                            <p>Total Switches</p>
+                            <small><span id="switchesOnline">--</span> online, <span id="switchesOffline">--</span> offline</small>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <div class="summary-icon status-info">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="summary-info">
+                            <h3 id="totalClients">--</h3>
+                            <p>Connected Clients</p>
+                            <small>Active connections</small>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <div class="summary-icon status-warning">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="summary-info">
+                            <h3 id="totalPOEPower">--W</h3>
+                            <p>POE Power Usage</p>
+                            <small><span id="poeBudget">--W</span> total budget</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts Panel -->
+                <div class="alerts-panel card">
+                    <div class="card__header">
+                        <h3><i class="fas fa-exclamation-triangle"></i> Active Alerts</h3>
+                    </div>
+                    <div class="card__body">
+                        <div id="alertsList" class="alerts-list">
+                            <!-- Alerts will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats Charts -->
+                <div class="chart-container card">
+                    <div class="card__header">
+                        <h3>System Overview</h3>
+                    </div>
+                    <div class="card__body">
+                        <canvas id="overviewChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FortiAPs Tab -->
+        <div id="fortiaps" class="tab-content">
+            <div class="tab-header">
+                <h2>FortiAP Monitoring</h2>
+                <div class="tab-controls">
+                    <input type="text" id="apSearchInput" class="search-input" placeholder="Search APs...">
+                    <select id="apStatusFilter" class="form-control">
+                        <option value="all">All Status</option>
+                        <option value="up">Online</option>
+                        <option value="down">Offline</option>
+                        <option value="warning">Warning</option>
+                    </select>
+                </div>
+            </div>
+            <div id="apGrid" class="device-grid">
+                <!-- AP cards will be populated here -->
+            </div>
+        </div>
+
+        <!-- FortiSwitches Tab -->
+        <div id="fortiswitches" class="tab-content">
+            <div class="tab-header">
+                <h2>FortiSwitch Monitoring</h2>
+                <div class="tab-controls">
+                    <input type="text" id="switchSearchInput" class="search-input" placeholder="Search switches...">
+                    <select id="switchStatusFilter" class="form-control">
+                        <option value="all">All Status</option>
+                        <option value="up">Online</option>
+                        <option value="down">Offline</option>
+                        <option value="warning">Warning</option>
+                    </select>
+                </div>
+            </div>
+            <div id="switchGrid" class="device-grid">
+                <!-- Switch cards will be populated here -->
+            </div>
+        </div>
+
+        <!-- POE Monitoring Tab -->
+        <div id="poe" class="tab-content">
+            <div class="tab-header">
+                <h2>POE Power Monitoring</h2>
+            </div>
+            <div class="poe-dashboard">
+                <div class="poe-overview card">
+                    <div class="card__header">
+                        <h3>Overall POE Status</h3>
+                    </div>
+                    <div class="card__body">
+                        <div class="poe-summary">
+                            <div class="poe-stat">
+                                <span class="poe-label">Total Budget:</span>
+                                <span id="poeTotalBudget" class="poe-value">--W</span>
+                            </div>
+                            <div class="poe-stat">
+                                <span class="poe-label">Total Consumption:</span>
+                                <span id="poeTotalConsumption" class="poe-value">--W</span>
+                            </div>
+                            <div class="poe-stat">
+                                <span class="poe-label">Utilization:</span>
+                                <span id="poeUtilization" class="poe-value">--%</span>
+                            </div>
+                        </div>
+                        <div class="poe-progress">
+                            <div class="progress-bar">
+                                <div id="poeProgressBar" class="progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="poeBySwitch" class="poe-switches">
+                    <!-- POE switch details will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Network Topology Tab -->
+        <div id="topology" class="tab-content">
+            <div class="tab-header">
+                <h2>Network Topology</h2>
+            </div>
+            <div class="topology-container card">
+                <div class="card__body">
+                    <div id="topologyView" class="topology-view">
+                        <!-- Network topology will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historical Data Tab -->
+        <div id="historical" class="tab-content">
+            <div class="tab-header">
+                <h2>Historical Trends</h2>
+                <div class="tab-controls">
+                    <select id="timeRangeSelector" class="form-control">
+                        <option value="1h">Last Hour</option>
+                        <option value="6h" selected>Last 6 Hours</option>
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                    </select>
+                </div>
+            </div>
+            <div class="charts-grid">
+                <div class="chart-container card">
+                    <div class="card__header">
+                        <h3>Client Connections Over Time</h3>
+                    </div>
+                    <div class="card__body">
+                        <canvas id="clientsChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container card">
+                    <div class="card__header">
+                        <h3>POE Power Consumption</h3>
+                    </div>
+                    <div class="card__body">
+                        <canvas id="poeChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container card">
+                    <div class="card__header">
+                        <h3>Temperature Monitoring</h3>
+                    </div>
+                    <div class="card__body">
+                        <canvas id="temperatureChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container card">
+                    <div class="card__header">
+                        <h3>Channel Utilization</h3>
+                    </div>
+                    <div class="card__body">
+                        <canvas id="channelChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Device Detail Modal -->
+    <div id="deviceModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Device Details</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Device details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

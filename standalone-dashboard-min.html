@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fortinet Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --color-primary: #1FB8CD;
+            --color-bg: #F8F9FC;
+            --color-text: #2A3036;
+            --color-text-secondary: #6C757D;
+            --color-card-bg: #FFFFFF;
+            --color-card-border: #E9ECEF;
+            --color-border: #DEE2E6;
+            --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+            --border-radius: 0.5rem;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+        }
+        header {
+            background-color: var(--color-card-bg);
+            padding: 1rem;
+            border-bottom: 1px solid var(--color-border);
+            box-shadow: var(--shadow-sm);
+        }
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--color-primary);
+        }
+        .nav {
+            background-color: var(--color-card-bg);
+            border-bottom: 1px solid var(--color-border);
+        }
+        .nav-tabs {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            overflow-x: auto;
+        }
+        .nav-tab {
+            padding: 1rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-family: inherit;
+            font-size: 1rem;
+            color: var(--color-text-secondary);
+            position: relative;
+        }
+        .nav-tab.active {
+            color: var(--color-primary);
+            font-weight: 500;
+        }
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: var(--color-primary);
+        }
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .card {
+            background-color: var(--color-card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .card__header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--color-card-border);
+            font-weight: 500;
+        }
+        .card__body {
+            padding: 1rem;
+        }
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .summary-card {
+            background-color: var(--color-card-bg);
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+        }
+        .summary-title {
+            font-size: 0.875rem;
+            color: var(--color-text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        .summary-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .summary-subtitle {
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Fortinet Infrastructure Dashboard</h1>
+            <div>
+                <span id="lastUpdated"></span>
+            </div>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="overview">Overview</button>
+            <button class="nav-tab" data-tab="fortiaps">FortiAPs</button>
+            <button class="nav-tab" data-tab="fortiswitches">FortiSwitches</button>
+            <button class="nav-tab" data-tab="poe">POE Monitoring</button>
+        </div>
+    </nav>
+
+    <main class="main">
+        <div id="overview" class="tab-content active">
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <div class="summary-title">Total Access Points</div>
+                    <div id="totalAPs" class="summary-value">3</div>
+                    <div class="summary-subtitle"><span id="apsOnline">2</span> online, <span id="apsOffline">1</span> offline</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-title">Total Switches</div>
+                    <div id="totalSwitches" class="summary-value">3</div>
+                    <div class="summary-subtitle"><span id="switchesOnline">2</span> online, <span id="switchesOffline">1</span> offline</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-title">Connected Clients</div>
+                    <div id="totalClients" class="summary-value">20</div>
+                    <div class="summary-subtitle">Active connections</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-title">POE Power Usage</div>
+                    <div id="totalPOEPower" class="summary-value">1230W</div>
+                    <div class="summary-subtitle"><span id="poeBudget">1665W</span> total budget</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card__header">
+                    Active Alerts
+                </div>
+                <div class="card__body">
+                    <div id="alertsList">
+                        <div style="padding: 0.5rem; border-left: 3px solid #B4413C;">
+                            <div style="font-weight: 500;">Distribution-Switch-3</div>
+                            <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Switch in warning state</div>
+                        </div>
+                        <div style="padding: 0.5rem; border-left: 3px solid #B4413C; margin-top: 0.5rem;">
+                            <div style="font-weight: 500;">Warehouse-AP3</div>
+                            <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Device offline</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="fortiaps" class="tab-content">
+            <h2>FortiAP Monitoring</h2>
+            <div class="card">
+                <div class="card__body">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid var(--color-border);">
+                                <th style="padding: 0.5rem;">Name</th>
+                                <th style="padding: 0.5rem;">Model</th>
+                                <th style="padding: 0.5rem;">Status</th>
+                                <th style="padding: 0.5rem;">IP Address</th>
+                                <th style="padding: 0.5rem;">Clients</th>
+                                <th style="padding: 0.5rem;">Temperature</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid var(--color-card-border);">
+                                <td style="padding: 0.5rem;">Office-Floor1-AP1</td>
+                                <td style="padding: 0.5rem;">FortiAP-431F</td>
+                                <td style="padding: 0.5rem; color: green;">up</td>
+                                <td style="padding: 0.5rem;">192.168.1.10</td>
+                                <td style="padding: 0.5rem;">12/64</td>
+                                <td style="padding: 0.5rem;">45°C</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--color-card-border);">
+                                <td style="padding: 0.5rem;">Office-Floor2-AP2</td>
+                                <td style="padding: 0.5rem;">FortiAP-431F</td>
+                                <td style="padding: 0.5rem; color: green;">up</td>
+                                <td style="padding: 0.5rem;">192.168.1.11</td>
+                                <td style="padding: 0.5rem;">8/64</td>
+                                <td style="padding: 0.5rem;">48°C</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--color-card-border);">
+                                <td style="padding: 0.5rem;">Warehouse-AP3</td>
+                                <td style="padding: 0.5rem;">FortiAP-231G</td>
+                                <td style="padding: 0.5rem; color: red;">down</td>
+                                <td style="padding: 0.5rem;">192.168.1.12</td>
+                                <td style="padding: 0.5rem;">0/64</td>
+                                <td style="padding: 0.5rem;">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="fortiswitches" class="tab-content">
+            <h2>FortiSwitch Monitoring</h2>
+            <div class="card">
+                <div class="card__body">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid var(--color-border);">
+                                <th style="padding: 0.5rem;">Name</th>
+                                <th style="padding: 0.5rem;">Model</th>
+                                <th style="padding: 0.5rem;">Status</th>
+                                <th style="padding: 0.5rem;">IP Address</th>
+                                <th style="padding: 0.5rem;">Ports</th>
+                                <th style="padding: 0.5rem;">POE Usage</th>
+                                <th style="padding: 0.5rem;">Temperature</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid var(--color-card-border);">
+                                <td style="padding: 0.5rem;">Core-Switch-1</td>
+                                <td style="padding: 0.5rem;">FortiSwitch-524D-FPOE</td>
+                                <td style="padding: 0.5rem; color: green;">up</td>
+                                <td style="padding: 0.5rem;">192.168.1.20</td>
+                                <td style="padding: 0.5rem;">20/24</td>
+                                <td style="padding: 0.5rem;">485W/740W (65.5%)</td>
+                                <td style="padding: 0.5rem;">52°C</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--color-card-border);">
+                                <td style="padding: 0.5rem;">Access-Switch-2</td>
+                                <td style="padding: 0.5rem;">FortiSwitch-124E-POE</td>
+                                <td style="padding: 0.5rem; color: green;">up</td>
+                                <td style="padding: 0.5rem;">192.168.1.21</td>
+                                <td style="padding: 0.5rem;">15/24</td>
+                                <td style="padding: 0.5rem;">125W/185W (67.6%)</td>
+                                <td style="padding: 0.5rem;">48°C</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--color-card-border);">
+                                <td style="padding: 0.5rem;">Distribution-Switch-3</td>
+                                <td style="padding: 0.5rem;">FortiSwitch-248E-FPOE</td>
+                                <td style="padding: 0.5rem; color: orange;">warning</td>
+                                <td style="padding: 0.5rem;">192.168.1.22</td>
+                                <td style="padding: 0.5rem;">42/48</td>
+                                <td style="padding: 0.5rem;">620W/740W (83.8%)</td>
+                                <td style="padding: 0.5rem;">68°C</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="poe" class="tab-content">
+            <h2>POE Power Monitoring</h2>
+            <div class="card">
+                <div class="card__header">
+                    Overall POE Status
+                </div>
+                <div class="card__body">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                        <div>
+                            <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Total Budget</div>
+                            <div style="font-size: 1.25rem; font-weight: 600;">1665W</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Total Consumption</div>
+                            <div style="font-size: 1.25rem; font-weight: 600;">1230W</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Utilization</div>
+                            <div style="font-size: 1.25rem; font-weight: 600;">73.9%</div>
+                        </div>
+                    </div>
+                    <div style="height: 8px; background-color: var(--color-card-border); border-radius: 4px; overflow: hidden;">
+                        <div style="height: 100%; width: 73.9%; background-color: #D2BA4C;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 1rem;">
+                <div class="card">
+                    <div class="card__header">
+                        Core-Switch-1
+                    </div>
+                    <div class="card__body">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                            <div>
+                                <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Budget</div>
+                                <div style="font-size: 1.25rem; font-weight: 600;">740W</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Consumption</div>
+                                <div style="font-size: 1.25rem; font-weight: 600;">485W</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.875rem; color: var(--color-text-secondary);">Ports</div>
+                                <div style="font-size: 1.25rem; font-weight: 600;">18/24</div>
+                            </div>
+                        </div>
+                        <div style="height: 8px; background-color: var(--color-card-border); border-radius: 4px; overflow: hidden;">
+                            <div style="height: 100%; width: 65.5%; background-color: #D2BA4C;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Simple Dashboard Controller
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update last updated time
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = 'Last Updated: ' + now.toLocaleString();
+            
+            // Tab switching
+            const tabs = document.querySelectorAll('.nav-tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Hide all tab contents
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    
+                    // Remove active class from all tabs
+                    tabs.forEach(t => {
+                        t.classList.remove('active');
+                    });
+                    
+                    // Show the selected tab content
+                    const tabName = this.getAttribute('data-tab');
+                    document.getElementById(tabName).classList.add('active');
+                    
+                    // Add active class to the clicked tab
+                    this.classList.add('active');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

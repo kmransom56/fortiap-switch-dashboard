@@ -1,0 +1,32 @@
+# Environment variables
+.env
+
+# Dependencies
+node_modules/
+
+# Certificates (contains private keys)
+certificates/*.key
+certificates/newcert-*
+certificates/cert-*
+
+# Temporary files
+*.log
+*.tmp
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+test/
+*.test.js
+
+# Zone Identifier files from Windows
+*.Zone.Identifier

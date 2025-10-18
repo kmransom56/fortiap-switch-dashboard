@@ -1,0 +1,31 @@
+# FortiGate Certificate Installation Commands
+# Generated: 2025-10-18T06:59:28.164Z
+
+# 1. Upload CA certificate
+config vpn certificate ca
+edit "ca.netintegrate.net"
+set ca "-----BEGIN CERTIFICATE-----
+# Paste content from ca.crt file here
+-----END CERTIFICATE-----"
+next
+end
+
+# 2. Upload server certificate and private key  
+config vpn certificate local
+edit "fortigate.netintegrate.net"
+set certificate "-----BEGIN CERTIFICATE-----
+# Paste content from fortigate.crt file here
+-----END CERTIFICATE-----"
+set private-key "-----BEGIN PRIVATE KEY-----
+# Paste content from fortigate.key file here
+-----END PRIVATE KEY-----"
+next
+end
+
+# 3. Configure HTTPS to use the new certificate
+config system global
+set admin-server-cert "fortigate.netintegrate.net"
+end
+
+# 4. Restart HTTPS service (optional)
+execute reboot
