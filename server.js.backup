@@ -47,8 +47,8 @@ async function buildUnifiedTopology() {
     fortigate: 1, aps: aps.length, switches: switches.length, wifi_clients: wifiClients.length, switch_devices: switchDevices.length
   }};
 }
-// Draw.io GraphML Export Endpoint (moved to after app initialization)
-// app.get('/api/network/topology/export/graphml', async (_req, res) => {
+// Draw.io GraphML Export Endpoint
+app.get('/api/network/topology/export/graphml', async (_req, res) => {
   try {
     const { nodes, edges } = await buildUnifiedTopology();
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<graphml xmlns="http://graphml.graphdrawing.org/xmlns">\n  <graph id="G" edgedefault="undirected">\n';
